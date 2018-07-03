@@ -27,6 +27,7 @@
 #include <cutils/log.h>
 #include <cutils/atomic.h>
 #include <cutils/properties.h>
+
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -39,9 +40,12 @@
 #include <system/graphics.h>
 
 #include <gbm.h>
+#include <xf86drm.h>
+#include <xf86drmMode.h>
 
 #include "gralloc_gbm_priv.h"
 #include "gralloc_drm_handle.h"
+
 
 #define MAX(a, b) (((a) > (b)) ? (a) : (b))
 
@@ -56,7 +60,7 @@ struct bo_data_t {
 void gralloc_gbm_destroy_user_data(struct gbm_bo *bo, void *data)
 {
 	struct bo_data_t *bo_data = (struct bo_data_t *)data;
-	delete bo_data;
+	free(bo_data);
 
 	(void)bo;
 }
@@ -127,6 +131,7 @@ static struct gbm_bo *gbm_import(struct gbm_device *gbm,
 	#endif
 
 	int format = get_gbm_format(handle->format);
+	
 	if (handle->prime_fd < 0)
 		return NULL;
 
@@ -151,7 +156,7 @@ static struct gbm_bo *gbm_import(struct gbm_device *gbm,
 	data.stride = handle->stride;
 	bo = gbm_bo_import(gbm, GBM_BO_IMPORT_FD, &data, 0);
 	#endif
-
+	ALOGE("Importing %d width %d height %d\n", handle->prime_fd, handle->width, handle->height);
 	return bo;
 }
 
@@ -181,8 +186,7 @@ static struct gbm_bo *gbm_alloc(struct gbm_device *gbm,
 		height += handle->height / 2;
 	}
 
-	ALOGV("create BO, size=%dx%d, fmt=%d, usage=%x",
-	      handle->width, handle->height, handle->format, usage);
+	
 	bo = gbm_bo_create(gbm, width, height, format, usage);
 	if (!bo) {
 		ALOGE("failed to create BO, size=%dx%d, fmt=%d, usage=%x",
@@ -196,15 +200,20 @@ static struct gbm_bo *gbm_alloc(struct gbm_device *gbm,
 	handle->modifier = gbm_bo_get_modifier(bo);
 	#endif
 
+	ALOGW("create BO, size=%dx%d, fmt=%d, usage=%x, fd=%d",
+	      handle->width, handle->height, handle->format, usage, handle->prime_fd);
+
 	return bo;
 }
 
 void gbm_free(buffer_handle_t handle)
 {
 	struct gbm_bo *bo = gralloc_gbm_bo_from_handle(handle);
-
+	//struct gralloc_gbm_handle(handle);
 	if (!bo)
 		return;
+	
+
 
 	gbm_bo_destroy(bo);
 }
@@ -277,6 +286,8 @@ void gbm_dev_destroy(struct gbm_device *gbm)
 	close(fd);
 }
 
+
+
 struct gbm_device *gbm_dev_create(void)
 {
 	struct gbm_device *gbm;
@@ -297,7 +308,58 @@ struct gbm_device *gbm_dev_create(void)
 	}
 
 	return gbm;
+
+	// struct gbm_device *gbm;
+	// char path[PROPERTY_VALUE_MAX];
+	// int fd;
+	// drm_magic_t magic;
+
+	
+	// fd = drmOpen("i915", 0);
+	// if (fd < 0) {
+	// 	ALOGE("failed to open %s", path);
+	// 	return NULL;
+	// }
+
+
+	// if(drmGetMagic(fd, &magic) == -1) {
+	// 	ALOGE("failed to get magic");
+	// 	return NULL;
+	// }
+
+	// ALOGW("Seriously we are asking X11 to grant almighty power %d", magic);
+
+	// gralloc_ipc_t cookie;
+	// cookie.cmd = 1;
+	// cookie.data = magic;
+
+	// if(gralloc_communicate_with_x11(&cookie) == -1)
+	// {
+	// 	ALOGE("Unable to do the communicate");
+	// 	//return NULL;
+	// }
+
+
+
+	// if(cookie.cmd != IPC_REPLY || cookie.data != IPC_DATA_OK)
+	// {
+	// 	ALOGE("X11 doesnt grant permission");
+	// 	//return NULL;
+	// }
+	// ALOGW("Granted");
+
+	// gbm = gbm_create_device(fd);
+	// if (!gbm) {
+	// 	ALOGE("failed to create gbm device");
+	// 	close(fd);
+	// }
+
+	// ALOGW("GBM Created %p", gbm);
+
+	// return gbm;
 }
+
+
 
 /*
  * Register a buffer handle.
@@ -312,7 +374,10 @@ int gralloc_gbm_handle_register(buffer_handle_t _handle, struct gbm_device *gbm)
 
 	bo = gbm_import(gbm, handle);
 	if (!bo)
+	{
+		ALOGE("Unable to import");
 		return -EINVAL;
+	}
 
 	handle->data_owner = getpid();
 	handle->data = bo;
@@ -409,7 +474,7 @@ int gralloc_gbm_bo_lock(buffer_handle_t handle,
 
 	bo_data = gbm_bo_data(bo);
 	if (!bo_data) {
-		bo_data = new struct bo_data_t();
+		bo_data = (bo_data_t*)malloc(sizeof(bo_data_t));
 		gbm_bo_set_user_data(bo, bo_data, gralloc_gbm_destroy_user_data);
 	}
 

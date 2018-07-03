@@ -29,6 +29,7 @@ LOCAL_SRC_FILES := \
 LOCAL_SHARED_LIBRARIES := \
 	libgbm \
 	liblog \
+	libdrm \
 	libcutils
 
 LOCAL_EXPORT_C_INCLUDE_DIRS := \
@@ -37,9 +38,9 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 LOCAL_MODULE := gralloc.gbm
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE_RELATIVE_PATH := hw
-LOCAL_PROPRIETARY_MODULE := true
 
 include $(BUILD_SHARED_LIBRARY)
+
 
 include $(CLEAR_VARS)
 
@@ -48,6 +49,6 @@ LOCAL_EXPORT_C_INCLUDE_DIRS := \
 
 LOCAL_MODULE := libgralloc_drm
 LOCAL_MODULE_TAGS := optional
-LOCAL_PROPRIETARY_MODULE := true
+
 
 include $(BUILD_SHARED_LIBRARY)

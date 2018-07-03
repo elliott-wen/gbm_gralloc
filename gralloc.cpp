@@ -25,6 +25,7 @@
 #define LOG_TAG "GRALLOC-GBM"
 
 #include <cutils/log.h>
+#include <cutils/sockets.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
@@ -39,6 +40,7 @@
 #include "gralloc_drm.h"
 #include "gralloc_gbm_priv.h"
 #include "gralloc_drm_handle.h"
+
 
 struct gbm_module_t {
 	gralloc_module_t base;
@@ -83,6 +85,7 @@ static inline int gralloc_gbm_get_bpp(int format)
  */
 static int gbm_init(struct gbm_module_t *dmod)
 {
+	ALOGW("gbm_init");
 	int err = 0;
 
 	pthread_mutex_lock(&dmod->mutex);
@@ -98,6 +101,7 @@ static int gbm_init(struct gbm_module_t *dmod)
 
 static int gbm_mod_perform(const struct gralloc_module_t *mod, int op, ...)
 {
+	ALOGW("gbm_mod_perform");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
 	va_list args;
 	int err;
@@ -134,6 +138,7 @@ static int gbm_mod_perform(const struct gralloc_module_t *mod, int op, ...)
 static int gbm_mod_register_buffer(const gralloc_module_t *mod,
 		buffer_handle_t handle)
 {
+	ALOGW("gbm_mod_register_buffer");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
 	int err;
 
@@ -151,6 +156,7 @@ static int gbm_mod_register_buffer(const gralloc_module_t *mod,
 static int gbm_mod_unregister_buffer(const gralloc_module_t *mod,
 		buffer_handle_t handle)
 {
+	ALOGW("gbm_mod_unregister_buffer");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
 	int err;
 
@@ -164,6 +170,7 @@ static int gbm_mod_unregister_buffer(const gralloc_module_t *mod,
 static int gbm_mod_lock(const gralloc_module_t *mod, buffer_handle_t handle,
 		int usage, int x, int y, int w, int h, void **ptr)
 {
+	ALOGW("gbm_mod_lock");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
 	int err;
 
@@ -178,6 +185,7 @@ static int gbm_mod_lock(const gralloc_module_t *mod, buffer_handle_t handle,
 
 static int gbm_mod_unlock(const gralloc_module_t *mod, buffer_handle_t handle)
 {
+	ALOGW("gbm_mod_unlock");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
 	int err;
 
@@ -190,23 +198,27 @@ static int gbm_mod_unlock(const gralloc_module_t *mod, buffer_handle_t handle)
 
 static int gbm_mod_close_gpu0(struct hw_device_t *dev)
 {
+	ALOGW("gbm_mod_close_gpu0");
 	struct gbm_module_t *dmod = (struct gbm_module_t *)dev->module;
 	struct alloc_device_t *alloc = (struct alloc_device_t *) dev;
 
 	gbm_dev_destroy(dmod->gbm);
-	delete alloc;
+	free(alloc);
 
 	return 0;
 }
 
 static int gbm_mod_free_gpu0(alloc_device_t *dev, buffer_handle_t handle)
 {
+	ALOGW("gbm_mod_free_gpu0");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) dev->common.module;
 
 	pthread_mutex_lock(&dmod->mutex);
+
 	gbm_free(handle);
-	native_handle_close(handle);
-	delete handle;
+	native_handle_close(handle); //native_handle_close does not do anything, but invoke an unnessary system call close 
+	//delete handle;
+	native_handle_delete((native_handle*)handle);
 
 	pthread_mutex_unlock(&dmod->mutex);
 	return 0;
@@ -216,6 +228,7 @@ static int gbm_mod_alloc_gpu0(alloc_device_t *dev,
 		int w, int h, int format, int usage,
 		buffer_handle_t *handle, int *stride)
 {
+	ALOGW("gbm_mod_alloc_gpu0");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) dev->common.module;
 	struct gralloc_gbm_handle_t *gbm_handle;
 	int err = 0;
@@ -232,7 +245,7 @@ static int gbm_mod_alloc_gpu0(alloc_device_t *dev,
 	/* in pixels */
 	*stride = gbm_handle->stride / gralloc_gbm_get_bpp(format);
 
-	ALOGV("buffer %p usage = %08x", *handle, usage);
+	ALOGE("buffer %p usage = %08x", *handle, usage);
 unlock:
 	pthread_mutex_unlock(&dmod->mutex);
 	return err;
@@ -240,6 +253,7 @@ unlock:
 
 static int gbm_mod_open_gpu0(struct gbm_module_t *dmod, hw_device_t **dev)
 {
+	ALOGW("gbm_mod_open_gpu0");
 	struct alloc_device_t *alloc;
 	int err;
 
@@ -247,7 +261,7 @@ static int gbm_mod_open_gpu0(struct gbm_module_t *dmod, hw_device_t **dev)
 	if (err)
 		return err;
 
-	alloc = new alloc_device_t();
+	alloc = (alloc_device_t *)malloc(sizeof(alloc_device_t));
 	if (!alloc)
 		return -EINVAL;
 
@@ -264,16 +278,138 @@ static int gbm_mod_open_gpu0(struct gbm_module_t *dmod, hw_device_t **dev)
 	return 0;
 }
 
+static int gbm_fb_set_interval(struct framebuffer_device_t* dev,
+            int interval)
+{
+	ALOGW("gbm_fb_set_interval");
+	(void)dev;
+	(void)interval;
+	return 0;
+}
+
+static int gbm_mod_close_fb0(hw_device_t *dev)
+{
+	ALOGW("gbm_mod_close_fb0");
+	struct framebuffer_device_t *fb = (struct framebuffer_device_t *) dev;
+
+	free(fb);
+	return 0;
+}
+
+static int _send_fd(int conn, int fd_to_send)
+{
+  	struct msghdr msg = { 0 };
+  	struct cmsghdr * hdr;
+  	char buf[CMSG_SPACE(sizeof(int))];
+  
+  	msg.msg_control = buf;
+  	msg.msg_controllen = sizeof(buf);
+  
+  	hdr = CMSG_FIRSTHDR(&msg);
+  	hdr->cmsg_len = CMSG_LEN(sizeof(int));
+  	hdr->cmsg_level = SOL_SOCKET;
+  	hdr->cmsg_type = SCM_RIGHTS;
+  	*(int*)CMSG_DATA(hdr) = fd_to_send;
+  
+  	return sendmsg(conn, &msg, 0);
+}
+
+
+static int gbm_deliver_frame_to_x11(int postfd, char *result)
+{
+	
+	char reply = 0;
+	int unixfd = socket_local_client(REMOTE_X11_ENDPOINT, ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM);
+	if(unixfd <= 0)
+	{
+		ALOGE("failed to connect unix socket");
+		return -1;
+	}
+
+	struct timeval tv;
+    tv.tv_sec = 5;
+    tv.tv_usec = 0;
+    setsockopt(unixfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv));
+
+    if(_send_fd(unixfd, postfd) == -1)
+    {
+    	ALOGE("failed to send unix socket");
+        close(unixfd);
+        return -1;
+    }
+
+    if(recv(unixfd, &reply, sizeof(reply), 0) != sizeof(reply))
+    {
+        ALOGE("failed to recv unix socket");
+        close(unixfd);
+        return -1;
+    }
+    close(unixfd);
+    if(result != NULL)
+    {
+    	*result = reply;
+    }
+    return 0;
+}
+
+
+static int gbm_fb_post(struct framebuffer_device_t* dev, buffer_handle_t buffer)
+{
+	struct gbm_module_t *dmod = (struct gbm_module_t *) dev->common.module;
+	//int err = 0;
+
+	pthread_mutex_lock(&dmod->mutex);
+	int framefd = gralloc_drm_get_prime_fd(buffer);
+	gbm_deliver_frame_to_x11(framefd, NULL);
+	pthread_mutex_unlock(&dmod->mutex);
+	return 0;
+}
+
+static int gbm_mod_open_fb0(struct gbm_module_t *dmod, hw_device_t **dev)
+{
+	ALOGW("gbm_mod_open_fb0");
+	struct framebuffer_device_t *fb;
+	int err;
+
+	fb = (framebuffer_device_t*)malloc(sizeof(framebuffer_device_t));
+	if (!fb)
+		return -EINVAL;
+
+	fb->common.tag = HARDWARE_DEVICE_TAG;
+	fb->common.version = 0;
+	fb->common.module = &dmod->base.common;
+	fb->common.close = gbm_mod_close_fb0;
+
+	fb->setSwapInterval = gbm_fb_set_interval;
+    fb->post            = gbm_fb_post;
+    fb->compositionComplete = 0;
+    fb->setUpdateRect = 0;
+    const_cast<uint32_t&>(fb->flags) = 0;
+    const_cast<uint32_t&>(fb->width) = 720;
+    const_cast<uint32_t&>(fb->height) = 1280;
+    const_cast<int&>(fb->stride) = 720;
+    const_cast<int&>(fb->format) = HAL_PIXEL_FORMAT_RGBA_8888;
+    const_cast<float&>(fb->xdpi) = 15;
+    const_cast<float&>(fb->ydpi) = 15;
+    const_cast<float&>(fb->fps) = 60; 
+    const_cast<int&>(fb->minSwapInterval) = 1;
+    const_cast<int&>(fb->maxSwapInterval) = 1;
+	*dev = &fb->common;
+
+	return 0;
+}
+
 static int gbm_mod_open(const struct hw_module_t *mod,
 		const char *name, struct hw_device_t **dev)
 {
+	ALOGW("GBM_MOD_OPEN");
 	struct gbm_module_t *dmod = (struct gbm_module_t *) mod;
-	int err;
+	int err = -EINVAL;
 
 	if (strcmp(name, GRALLOC_HARDWARE_GPU0) == 0)
 		err = gbm_mod_open_gpu0(dmod, dev);
-	else
-		err = -EINVAL;
+	else if (strcmp(name, GRALLOC_HARDWARE_FB0) == 0)
+		err = gbm_mod_open_fb0(dmod, dev);
 
 	return err;
 }

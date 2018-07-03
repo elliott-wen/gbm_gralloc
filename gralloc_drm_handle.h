@@ -33,6 +33,9 @@
 extern "C" {
 #endif
 
+#define REMOTE_X11_ENDPOINT "/host/opengl"
+
+
 struct gralloc_drm_handle_t {
 	native_handle_t base;
 
