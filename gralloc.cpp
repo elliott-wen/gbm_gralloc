@@ -296,22 +296,34 @@ static int gbm_mod_close_fb0(hw_device_t *dev)
 	return 0;
 }
 
-static int _send_fd(int conn, int fd_to_send)
+static int _send_fd(int s, int fd)
 {
-  	struct msghdr msg = { 0 };
-  	struct cmsghdr * hdr;
-  	char buf[CMSG_SPACE(sizeof(int))];
-  
-  	msg.msg_control = buf;
-  	msg.msg_controllen = sizeof(buf);
-  
-  	hdr = CMSG_FIRSTHDR(&msg);
-  	hdr->cmsg_len = CMSG_LEN(sizeof(int));
-  	hdr->cmsg_level = SOL_SOCKET;
-  	hdr->cmsg_type = SCM_RIGHTS;
-  	*(int*)CMSG_DATA(hdr) = fd_to_send;
-  
-  	return sendmsg(conn, &msg, 0);
+  	char buf[1];
+	struct iovec iov;
+	struct msghdr msg;
+	struct cmsghdr *cmsg;
+	unsigned int n;
+	char cms[CMSG_SPACE(sizeof(int))];
+	
+	buf[0] = 0;
+	iov.iov_base = buf;
+	iov.iov_len = 1;
+
+	memset(&msg, 0, sizeof msg);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = (caddr_t)cms;
+	msg.msg_controllen = CMSG_LEN(sizeof(int));
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	memmove(CMSG_DATA(cmsg), &fd, sizeof(int));
+
+	if((n=sendmsg(s, &msg, 0)) != iov.iov_len)
+		return -1;
+	return 0;
 }
 
 
@@ -387,11 +399,11 @@ static int gbm_mod_open_fb0(struct gbm_module_t *dmod, hw_device_t **dev)
     const_cast<uint32_t&>(fb->flags) = 0;
     const_cast<uint32_t&>(fb->width) = 720;
     const_cast<uint32_t&>(fb->height) = 1280;
-    const_cast<int&>(fb->stride) = 720;
+    const_cast<int&>(fb->stride) = 768;
     const_cast<int&>(fb->format) = HAL_PIXEL_FORMAT_RGBA_8888;
-    const_cast<float&>(fb->xdpi) = 15;
-    const_cast<float&>(fb->ydpi) = 15;
-    const_cast<float&>(fb->fps) = 60; 
+    const_cast<float&>(fb->xdpi) = 240;
+    const_cast<float&>(fb->ydpi) = 240;
+    const_cast<float&>(fb->fps) = 30; 
     const_cast<int&>(fb->minSwapInterval) = 1;
     const_cast<int&>(fb->maxSwapInterval) = 1;
 	*dev = &fb->common;

@@ -156,7 +156,7 @@ static struct gbm_bo *gbm_import(struct gbm_device *gbm,
 	data.stride = handle->stride;
 	bo = gbm_bo_import(gbm, GBM_BO_IMPORT_FD, &data, 0);
 	#endif
-	ALOGE("Importing %d width %d height %d\n", handle->prime_fd, handle->width, handle->height);
+	ALOGE("Importing %d width %d height %d stride %d\n", handle->prime_fd, handle->width, handle->height, handle->stride);
 	return bo;
 }
 
@@ -200,8 +200,8 @@ static struct gbm_bo *gbm_alloc(struct gbm_device *gbm,
 	handle->modifier = gbm_bo_get_modifier(bo);
 	#endif
 
-	ALOGW("create BO, size=%dx%d, fmt=%d, usage=%x, fd=%d",
-	      handle->width, handle->height, handle->format, usage, handle->prime_fd);
+	ALOGW("create BO, size=%dx%d, fmt=%d, usage=%x, stride=%d, fd=%d",
+	      handle->width, handle->height, handle->format, usage, handle->stride, handle->prime_fd);
 
 	return bo;
 }
